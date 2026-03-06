@@ -19,3 +19,8 @@ MCP_WALKTHROUGH.md
 *.jpeg
 *.gif
 assets/
+
+# Ignore root README
+README.md
+
+test_ollama.py

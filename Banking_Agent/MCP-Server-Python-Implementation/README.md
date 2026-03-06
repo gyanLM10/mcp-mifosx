@@ -84,14 +84,24 @@ Tellers can resume past conversations or start fresh threads instantly:
 
 ---
 
-## Development & Docker
+### 🛡️ Fineract Sandbox (with Persistence)
+To run a local Fineract instance with persistent storage (so data isn't lost on restart):
+```bash
+# Copy the example docker-compose
+cp docker-compose.yml.example docker-compose.yml
 
-### Building the Image
+# Start Fineract and MariaDB
+docker-compose up -d
+```
+> **Important:** This setup creates a local `mariadb-data` volume to preserve your clients and accounts.
+
+### Development & Docker
+#### Building the Image
 ```bash
 docker build -t mifos-mcp-server .
 ```
 
-### Running with .env
+#### Running with .env
 ```bash
 docker run -i --env-file .env mifos-mcp-server
 ```

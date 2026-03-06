@@ -35,6 +35,7 @@ llm = ChatOllama(
     num_ctx=4096,        # Safe on 8GB RAM regardless of model chosen
     num_predict=1024,    # Qwen generates efficiently so 1024 should be problem-free
     repeat_penalty=1.0,  # Qwen 2.5 handles repetition natively — leave at neutral
+    num_gpu=20,          # CRITICAL: Offload 13/33 layers to CPU to fit in 8GB RAM with Docker
 )
 
 # ─── 3. System Prompt ──────────────────────────────────────────────────────────
