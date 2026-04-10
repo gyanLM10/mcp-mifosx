@@ -20,6 +20,13 @@ pub struct ClientIdReq { pub client_id: i64 }
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct CreateLoanReq { pub client_id: i64, pub amount_exactly_from_user_prompt: f64, pub months: i32, pub product_id: Option<i64> }
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct UpdateLoanReq { 
+    pub loan_id: i64, 
+    pub amount_exactly_from_user_prompt: Option<f64>, 
+    pub months: Option<i32>, 
+    pub product_id: Option<i64> 
+}
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct CreateGroupLoanReq { pub group_id: i64, pub amount_exactly_from_user_prompt: f64, pub months: i32, pub product_id: Option<i64> }
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct ApproveLoanReq { pub loan_id: i64, pub amount_exactly_from_user_prompt: Option<f64> }
@@ -83,6 +90,52 @@ pub async fn create_group_loan(adapter: &FineractAdapter, req: CreateGroupLoanRe
         "submittedOnDate": today(), "locale": "en", "dateFormat": "dd MMMM yyyy", "loanType": "group"
     });
     let res = adapter.execute_post("loans", &payload).await.map_err(to_err)?;
+    to_result(res)
+}
+
+pub async fn update_loan(adapter: &FineractAdapter, req: UpdateLoanReq) -> Result<CallToolResult, McpError> {
+    // 1. Fetch current state to satisfy Fineract's mandatory field requirement on PUT
+    let current = adapter.execute_get(&format!("loans/{}", req.loan_id), None).await.map_err(to_err)?;
+    
+    // 2. Prepare payload with existing mandatory fields as baseline
+    let mut payload = json!({
+        "productId": current.get("productId").and_then(|v| v.as_i64())
+            .or_else(|| current.get("product").and_then(|p| p.get("id")).and_then(|id| id.as_i64()))
+            .unwrap_or(1),
+        "principal": current.get("principal").and_then(|v| v.as_f64()).unwrap_or(0.0).to_string(),
+        "loanTermFrequency": current.get("termFrequency").and_then(|v| v.as_i64())
+            .or_else(|| current.get("loanTermFrequency").and_then(|v| v.as_i64()))
+            .unwrap_or(1),
+        "loanTermFrequencyType": current.get("termPeriodFrequencyType").and_then(|v| v.get("id")).and_then(|v| v.as_i64()).unwrap_or(2),
+        "numberOfRepayments": current.get("numberOfRepayments").and_then(|v| v.as_i64()).unwrap_or(1),
+        "repaymentEvery": current.get("repaymentEvery").and_then(|v| v.as_i64()).unwrap_or(1),
+        "repaymentFrequencyType": current.get("repaymentFrequencyType").and_then(|v| v.get("id")).and_then(|v| v.as_i64()).unwrap_or(2),
+        "interestRatePerPeriod": current.get("interestRatePerPeriod").and_then(|v| v.as_f64()).unwrap_or(5.0),
+        "amortizationType": current.get("amortizationType").and_then(|v| v.get("id")).and_then(|v| v.as_i64()).unwrap_or(1),
+        "interestType": current.get("interestType").and_then(|v| v.get("id")).and_then(|v| v.as_i64()).unwrap_or(0),
+        "interestCalculationPeriodType": current.get("interestCalculationPeriodType").and_then(|v| v.get("id")).and_then(|v| v.as_i64()).unwrap_or(1),
+        "transactionProcessingStrategyCode": current.get("transactionProcessingStrategyCode").and_then(|v| v.as_str()).unwrap_or("mifos-standard-strategy"),
+        "loanType": current.get("loanType").and_then(|v| v.get("value")).and_then(|v| v.as_str()).map(|s| s.to_lowercase()).unwrap_or_else(|| "individual".to_string()),
+        "expectedDisbursementDate": current.get("timeline").and_then(|t| t.get("expectedDisbursementDate")).and_then(|d| d.as_array()).map(|a| format!("{} {} {}", a[2], a[1], a[0])).unwrap_or_else(|| today()),
+        "submittedOnDate": current.get("timeline").and_then(|t| t.get("submittedOnDate")).and_then(|d| d.as_array()).map(|a| format!("{} {} {}", a[2], a[1], a[0])).unwrap_or_else(|| today()),
+        "locale": "en",
+        "dateFormat": "dd MMMM yyyy"
+    });
+
+    // 3. Overlay the user's updates
+    if let Some(amt) = req.amount_exactly_from_user_prompt { payload["principal"] = json!(amt.to_string()); }
+    if let Some(m) = req.months { 
+        payload["loanTermFrequency"] = json!(m);
+        payload["numberOfRepayments"] = json!(m);
+    }
+    if let Some(pid) = req.product_id { payload["productId"] = json!(pid); }
+    
+    let res = adapter.execute_put(&format!("loans/{}", req.loan_id), &payload).await.map_err(to_err)?;
+    to_result(res)
+}
+
+pub async fn delete_loan(adapter: &FineractAdapter, req: LoanIdReq) -> Result<CallToolResult, McpError> {
+    let res = adapter.execute_delete(&format!("loans/{}", req.loan_id)).await.map_err(to_err)?;
     to_result(res)
 }
 
